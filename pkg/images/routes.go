@@ -10,7 +10,6 @@ func (s *Server) Routes() chi.Router {
 
 	r.Get("/", s.showUploadForm)
 	r.Post("/upload", s.uploadImage)
-	r.Get("/download/{filename}", s.downloadImage)
 
 	return r
 

@@ -1,10 +1,10 @@
 package images
 
 import (
+	"bytes"
 	"image"
-	"io"
+	"image/jpeg"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi"
 	"github.com/nfnt/resize"
@@ -65,56 +65,17 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 
 	newImg := resize.Resize(uint(img.Bounds().Dx()*5), uint(img.Bounds().Dy()), img, resize.Lanczos3)
 
-	err = s.Service.Save(newFilename, newImg)
-	if err != nil {
-		http.Error(w, "Error saving resized image", http.StatusInternalServerError)
+	var imgBuffer bytes.Buffer
+	if err := jpeg.Encode(&imgBuffer, newImg, nil); err != nil {
+		http.Error(w, "Error encoding resized image", http.StatusInternalServerError)
 		return
 	}
 
-	downloadURL := "/download/" + newFilename
-	response := `
-        <html>
-        	Imagem rebaixada com sucesso.
-        	<a id="downloadButton" href="` + downloadURL + `">
-            	<button type="button">Download Resized Image</button>
-        	</a>
-        </html>
-		<script>
-    		document.getElementById("downloadButton").addEventListener("click", function(event) {
-			event.preventDefault();
-			var downloadLink = this.getAttribute("href");
-			var link = document.createElement("a");
-			link.href = downloadLink;
-			link.download = "` + newFilename + `"; // Set the desired filename here
-			link.style.display = "none";
-			document.body.appendChild(link);
-			link.click();
-			document.body.removeChild(link);
-		});
-		</script>
-    `
-
-	w.Write([]byte(response))
-
-}
-
-func (s *Server) downloadImage(w http.ResponseWriter, r *http.Request) {
-
-	filename := chi.URLParam(r, "filename")
-	path := "./" + filename
-
-	imgFile, err := os.Open(path)
-	if err != nil {
-		http.Error(w, "Error opening image file", http.StatusNotFound)
-		return
-	}
-	defer imgFile.Close()
-
+	w.Header().Set("Content-Disposition", "attachment; filename="+newFilename)
 	w.Header().Set("Content-Type", "image/jpeg")
 
-	_, err = io.Copy(w, imgFile)
-	if err != nil {
-		http.Error(w, "Error copying image to response", http.StatusInternalServerError)
+	if _, err := w.Write(imgBuffer.Bytes()); err != nil {
+		http.Error(w, "Error writing image to response", http.StatusInternalServerError)
 		return
 	}
 
