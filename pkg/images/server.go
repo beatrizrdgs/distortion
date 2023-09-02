@@ -2,34 +2,37 @@ package images
 
 import (
 	"bytes"
-	"fmt"
 	"image"
-	"image/jpeg"
-	"image/png"
+	"image-messer/pkg/cerrors"
+	"image-messer/pkg/utils"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi"
-	"github.com/nfnt/resize"
 )
 
 type Server struct {
 	Router  chi.Router
-	Service *Service
+	Service Handler
 }
 
-func NewServer(s *Service) *Server {
-
-	r := chi.NewRouter()
+func NewServer(s Handler) *Server {
 
 	svr := &Server{
-		Router:  r,
+		Router:  chi.NewRouter(),
 		Service: s,
 	}
 
-	r.Mount("/", svr.Routes())
+	svr.Router.Get("/", svr.showUploadForm)
+	svr.Router.Post("/upload", svr.uploadImage)
 
 	return svr
+
+}
+
+func (s *Server) Routes() chi.Router {
+
+	return s.Router
 
 }
 
@@ -40,59 +43,44 @@ func (s *Server) showUploadForm(w http.ResponseWriter, r *http.Request) {
 
 }
 
+var errWritingResponse = cerrors.NewCError("error writing image to response", http.StatusInternalServerError)
+
 func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 
 	file, handler, err := r.FormFile("image")
 	if err != nil {
-		http.Error(w, "Error parsing image", http.StatusBadRequest)
+		utils.HandleError(w, r, ErrParsingImage)
 		return
 	}
 	defer file.Close()
 
 	img, _, err := image.Decode(file)
 	if err != nil {
-		http.Error(w, "Error decoding image", http.StatusInternalServerError)
+		utils.HandleError(w, r, ErrDecodeImage)
 		return
 	}
 
 	transformationType := r.FormValue("transformation")
+
+	newImg, err := s.Service.Transform(img, NewTransformationType(transformationType))
+
 	newFilename := transformationType + "_" + handler.Filename
-	var newImg image.Image
 
-	switch transformationType {
-	case "rebaixado":
-		newImg = resize.Resize(uint(img.Bounds().Dx()*5), uint(img.Bounds().Dy()), img, resize.Lanczos3)
-	case "pixelado":
-		pixelSize := 15
-		newImg = resize.Resize(uint(img.Bounds().Dx()/pixelSize), uint(img.Bounds().Dy()/pixelSize), img, resize.NearestNeighbor)
-	}
-
-	var imgBuffer bytes.Buffer
+	buffer := new(bytes.Buffer)
 
 	format := strings.Split(handler.Filename, ".")[1]
-	if err := encodeImage(&imgBuffer, newImg, format); err != nil {
-		http.Error(w, "Error encoding image", http.StatusInternalServerError)
+	if err := s.Service.EncodeImage(newImg, format, buffer); err != nil {
+		utils.HandleError(w, r, err)
 		return
 	}
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+newFilename)
 
-	if _, err := w.Write(imgBuffer.Bytes()); err != nil {
-		http.Error(w, "Error writing image to response", http.StatusInternalServerError)
+	if _, err := w.Write(buffer.Bytes()); err != nil {
+		utils.HandleError(w, r, errWritingResponse)
 		return
 	}
 
-}
-
-func encodeImage(imgBuffer *bytes.Buffer, img image.Image, format string) error {
-	switch format {
-	case "png":
-		return png.Encode(imgBuffer, img)
-	case "jpeg", "jpg":
-		return jpeg.Encode(imgBuffer, img, nil)
-	default:
-		return fmt.Errorf("Unsupported image format: %s", format)
-	}
 }
 
 func homePage() string {
