@@ -1,12 +1,12 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.21.5-alpine AS builder
 
-WORKDIR /image-messer
+WORKDIR /distortion
 
 COPY . .
 
 RUN go mod download
-RUN go build -o image-messer
+RUN go build -o distortion
 
 EXPOSE 8080
 
-CMD ["./image-messer"]
+CMD ["./distortion"]
