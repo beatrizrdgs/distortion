@@ -66,7 +66,7 @@ You can run the project with either Go or Docker. Please note that this assumes 
 
 **Go**
 ```bash
-go run main.go
+go run main.go server
 ```
 
 
