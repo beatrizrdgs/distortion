@@ -1,12 +1,9 @@
 package main
 
 import (
-	"distortion/internal/images"
+	"github.com/beatrizrdgs/distortion/cmd"
 )
 
 func main() {
-	svc := images.NewService()
-	svr := images.NewServer(":8080", svc)
-
-	svr.Run()
+	cmd.Execute()
 }

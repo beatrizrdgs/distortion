@@ -1,4 +1,4 @@
-package images
+package distortion
 
 import (
 	"bytes"
@@ -11,50 +11,41 @@ import (
 	"github.com/nfnt/resize"
 )
 
-type Service interface {
-	EncodeImage(img image.Image, format string, buffer *bytes.Buffer) error
-	Transform(img image.Image, transformation TransformationType) (image.Image, error)
-	Transformation
+type transformation struct{}
+
+type service struct {
+	transformation
 }
 
-type Transformation interface {
-	Pixelate(img image.Image, pixelSize int) image.Image
-	Stretch(img image.Image, size ImageSize) image.Image
-	Jokerize(img image.Image) image.Image
-	Chuuify(img image.Image) image.Image
+func NewService() service {
+	return service{}
 }
 
-type service struct{}
-
-func NewService() Service {
-	return &service{}
-}
-
-func (s *service) Transform(img image.Image, transformation TransformationType) (image.Image, error) {
+func (s *service) transform(img image.Image, transformation transformationType) (image.Image, error) {
 	switch transformation {
-	case stretched:
-		img = s.Stretch(img, ImageSize{Width: img.Bounds().Dx() * 5, Height: img.Bounds().Dy()})
-	case pixelated:
-		img = s.Pixelate(img, 15)
-	case joker:
-		img = s.Jokerize(img)
-	case chuu:
-		img = s.Chuuify(img)
+	case stretch:
+		img = s.stretch(img, imageSize{width: img.Bounds().Dx() * 5, height: img.Bounds().Dy()})
+	case pixelate:
+		img = s.pixelate(img, 15)
+	case jokerize:
+		img = s.jokerize(img)
+	case chuuify:
+		img = s.chuuify(img)
 	default:
-		return nil, ErrInvalidTransformationType
+		return nil, errInvalidTransformationType
 	}
 	return img, nil
 }
 
-func (s *service) Pixelate(img image.Image, pixelSize int) image.Image {
+func (s *service) pixelate(img image.Image, pixelSize int) image.Image {
 	return resize.Resize(uint(img.Bounds().Dx()/pixelSize), uint(img.Bounds().Dy()/pixelSize), img, resize.NearestNeighbor)
 }
 
-func (s *service) Stretch(img image.Image, size ImageSize) image.Image {
-	return resize.Resize(uint(size.Width), uint(size.Height), img, resize.Lanczos3)
+func (s *service) stretch(img image.Image, size imageSize) image.Image {
+	return resize.Resize(uint(size.width), uint(size.height), img, resize.Lanczos3)
 }
 
-func (s *service) Jokerize(img image.Image) image.Image {
+func (s *service) jokerize(img image.Image) image.Image {
 	jokerImg, err := loadImage(jokerPath)
 	if err != nil {
 		return nil
@@ -68,7 +59,7 @@ func (s *service) Jokerize(img image.Image) image.Image {
 	return jokerizedImg
 }
 
-func (s *service) Chuuify(img image.Image) image.Image {
+func (s *service) chuuify(img image.Image) image.Image {
 	chuuImg, err := loadImage(chuuPath)
 	if err != nil {
 		return nil
@@ -82,36 +73,14 @@ func (s *service) Chuuify(img image.Image) image.Image {
 	return chuuifiedImg
 }
 
-func (s *service) EncodeImage(img image.Image, format string, buffer *bytes.Buffer) error {
+func (s *service) encodeImage(img image.Image, format string, buffer *bytes.Buffer) error {
 	switch format {
 	case "png":
 		png.Encode(buffer, img)
 	case "jpeg", "jpg":
 		jpeg.Encode(buffer, img, nil)
 	default:
-		return ErrUnsupportedImageFormat
-	}
-
-	return nil
-}
-
-func (s *service) Save(path string, img image.Image) error {
-	b := bytes.NewBuffer(nil)
-
-	err := jpeg.Encode(b, img, nil)
-	if err != nil {
-		return err
-	}
-
-	newImg, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer newImg.Close()
-
-	_, err = newImg.Write(b.Bytes())
-	if err != nil {
-		return err
+		return errUnsupportedImageFormat
 	}
 
 	return nil
@@ -126,7 +95,7 @@ func combineImages(originalImage image.Image, overlayImage image.Image, orientat
 	case "horizontal":
 		combinedImage = combineHorizontally(originalImage, overlayImage)
 	default:
-		return nil, ErrInvalidOrientation
+		return nil, errInvalidOrientation
 	}
 
 	return combinedImage, nil
