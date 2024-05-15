@@ -9,4 +9,4 @@ RUN go build -o distortion
 
 EXPOSE 8080
 
-CMD ["./distortion"]
+CMD ["./distortion", "server"]
